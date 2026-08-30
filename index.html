@@ -11,6 +11,7 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            font-family: Arial, sans-serif;
         }
         
         video {
@@ -24,7 +25,6 @@
             z-index: 1;
         }
         
-        /* LAPISAN BLUR (DI ATAS VIDEO) */
         .blur-overlay {
             position: fixed;
             top: 0;
@@ -32,49 +32,136 @@
             width: 100vw;
             height: 100vh;
             z-index: 2;
-            /* ======== SETTING BLUR ======== */
-            backdrop-filter: blur(35px); /* GANTI ANGKA INI (5-50) */
-            -webkit-backdrop-filter: blur(30px); /* BUAT SAFARI */
-            /* ============================== */
-            pointer-events: none; /* BIAR KLIK BISA TEMBUS */
-        }
-        
-        /* LAPISAN MUKA (TEMBUS BLUR) - PAKAI CLIP-PATH */
-        .face-mask {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 3;
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
             pointer-events: none;
-            /* MUKA TEMBUS PAKAI MASK (TAPI GAK BISA DETECT WAJAH OTOMATIS) */
+        }
+
+        /* TOMBOL */
+        .btn-container {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn-capture {
+            background: #ff6b6b;
+        }
+
+        .btn-capture:hover {
+            background: #ee5a24;
+        }
+
+        .btn-record {
+            background: #4a69bd;
+        }
+
+        .btn-record:hover {
+            background: #1e3799;
+        }
+
+        .btn-record.recording {
+            background: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .btn-download {
+            background: #0abde3;
+        }
+
+        .btn-download:hover {
+            background: #0a7e8c;
+        }
+
+        .status {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
         }
 
         .info {
             position: fixed;
-            bottom: 30px;
+            top: 80px;
             left: 50%;
             transform: translateX(-50%);
-            color: white;
-            background: rgba(0,0,0,0.6);
-            padding: 12px 24px;
-            border-radius: 12px;
-            font-family: Arial;
+            color: rgba(255,255,255,0.5);
             z-index: 10;
-            font-size: 14px;
-            pointer-events: none;
+            font-size: 12px;
+            background: rgba(0,0,0,0.3);
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+
+        /* HIDE UNTUK HP */
+        @media (max-width: 600px) {
+            .btn { padding: 12px 18px; font-size: 14px; }
+            .btn-container { gap: 10px; bottom: 20px; }
         }
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
     <div class="blur-overlay"></div>
-    <div class="info">📷 Background Blur (GPU) - KAMERA LANCAR!</div>
+    
+    <div class="info">📷 Background Blur - Klik tombol untuk capture / rekam</div>
+    <div class="status" id="status">📸 Gambar tersimpan!</div>
+
+    <div class="btn-container">
+        <button class="btn btn-capture" id="btnCapture">📸 Ambil Gambar</button>
+        <button class="btn btn-record" id="btnRecord">🎥 Rekam Video</button>
+    </div>
 
     <script>
         const video = document.getElementById('video');
+        const status = document.getElementById('status');
+        const btnCapture = document.getElementById('btnCapture');
+        const btnRecord = document.getElementById('btnRecord');
 
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        // ======== SETTING BLUR ========
+        // Ganti angka 30 di CSS (backdrop-filter: blur(30px))
+        // ==============================
+
+        // ======== MULAI KAMERA ========
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -88,6 +175,90 @@
         }
 
         startCamera();
+
+        // ======== AMBIL GAMBAR ========
+        btnCapture.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // Download langsung
+            const link = document.createElement('a');
+            link.download = `capture-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            
+            showStatus('📸 Gambar berhasil diambil!');
+        });
+
+        // ======== REKAM VIDEO ========
+        btnRecord.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        function startRecording() {
+            const stream = video.srcObject;
+            if (!stream) return;
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'video/webm;codecs=vp9'
+            });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = `recording-${Date.now()}.webm`;
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+                showStatus('🎥 Video berhasil direkam!');
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            btnRecord.textContent = '⏹ Stop Rekam';
+            btnRecord.classList.add('recording');
+            showStatus('🎥 Merekam video...');
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                btnRecord.textContent = '🎥 Rekam Video';
+                btnRecord.classList.remove('recording');
+            }
+        }
+
+        // ======== STATUS SEMENTARA ========
+        function showStatus(msg) {
+            status.textContent = msg;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        // ======== KEYBOARD SHORTCUT ========
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'q' || e.key === 'Q') {
+                location.reload();
+            }
+        });
     </script>
 </body>
 </html>
