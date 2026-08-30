@@ -1,9 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AGILXD</title>
+    <title>Background Blur - Web</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        video, canvas { position: absolute; width: 640px; height: 480px; }
+        canvas { transform: scaleX(-1); }
+        video { transform: scaleX(-1); }
+        .info { position: absolute; bottom: 20px; color: white; font-family: Arial; font-size: 14px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; }
+    </style>
 </head>
 <body>
-    <h1>Halo! Ini Project AGILXD</h1>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="info">📷 Background Blur - Tekan Q untuk keluar (di browser)</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm/vision_bundle.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
