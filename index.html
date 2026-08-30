@@ -37,7 +37,6 @@
             pointer-events: none;
         }
 
-        /* TOMBOL */
         .btn-container {
             position: fixed;
             bottom: 40px;
@@ -62,26 +61,11 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
-        .btn:hover {
-            transform: scale(1.05);
-        }
-
-        .btn-capture {
-            background: #ff6b6b;
-        }
-
-        .btn-capture:hover {
-            background: #ee5a24;
-        }
-
-        .btn-record {
-            background: #4a69bd;
-        }
-
-        .btn-record:hover {
-            background: #1e3799;
-        }
-
+        .btn:hover { transform: scale(1.05); }
+        .btn-capture { background: #ff6b6b; }
+        .btn-capture:hover { background: #ee5a24; }
+        .btn-record { background: #4a69bd; }
+        .btn-record:hover { background: #1e3799; }
         .btn-record.recording {
             background: #e74c3c;
             animation: pulse 1s infinite;
@@ -91,14 +75,6 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
-        }
-
-        .btn-download {
-            background: #0abde3;
-        }
-
-        .btn-download:hover {
-            background: #0a7e8c;
         }
 
         .status {
@@ -128,7 +104,6 @@
             border-radius: 8px;
         }
 
-        /* HIDE UNTUK HP */
         @media (max-width: 600px) {
             .btn { padding: 12px 18px; font-size: 14px; }
             .btn-container { gap: 10px; bottom: 20px; }
@@ -156,9 +131,11 @@
         let mediaRecorder = null;
         let recordedChunks = [];
         let isRecording = false;
+        let canvasStream = null;
+        let animationId = null;
 
         // ======== SETTING BLUR ========
-        // Ganti angka 30 di CSS (backdrop-filter: blur(30px))
+        const blurSize = 30; // SAMAIN DENGAN CSS
         // ==============================
 
         // ======== MULAI KAMERA ========
@@ -176,6 +153,44 @@
 
         startCamera();
 
+        // ======== FUNGSI BLUR ========
+        function applyBlur(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const half = Math.floor(blurSize / 2);
+            const tempData = new Uint8ClampedArray(data);
+            
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const idx = (y * canvas.width + x) * 4;
+                    let r = 0, g = 0, b = 0, count = 0;
+                    
+                    for (let dy = -half; dy <= half; dy++) {
+                        for (let dx = -half; dx <= half; dx++) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
+                                const nIdx = (ny * canvas.width + nx) * 4;
+                                r += tempData[nIdx];
+                                g += tempData[nIdx + 1];
+                                b += tempData[nIdx + 2];
+                                count++;
+                            }
+                        }
+                    }
+                    
+                    if (count > 0) {
+                        data[idx] = r / count;
+                        data[idx + 1] = g / count;
+                        data[idx + 2] = b / count;
+                    }
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
         // ======== AMBIL GAMBAR ========
         btnCapture.addEventListener('click', () => {
             const canvas = document.createElement('canvas');
@@ -184,16 +199,17 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0);
             
-            // Download langsung
+            applyBlur(canvas);
+            
             const link = document.createElement('a');
-            link.download = `capture-${Date.now()}.png`;
+            link.download = `capture-blur-${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
             
-            showStatus('📸 Gambar berhasil diambil!');
+            showStatus('📸 Gambar BLUR berhasil diambil!');
         });
 
-        // ======== REKAM VIDEO ========
+        // ======== REKAM VIDEO (BLUR) ========
         btnRecord.addEventListener('click', () => {
             if (isRecording) {
                 stopRecording();
@@ -203,13 +219,19 @@
         });
 
         function startRecording() {
-            const stream = video.srcObject;
-            if (!stream) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
 
-            recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream, {
+            // Buat stream dari canvas
+            canvasStream = canvas.captureStream(30);
+
+            mediaRecorder = new MediaRecorder(canvasStream, {
                 mimeType: 'video/webm;codecs=vp9'
             });
+
+            recordedChunks = [];
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -221,18 +243,34 @@
                 const blob = new Blob(recordedChunks, { type: 'video/webm' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.download = `recording-${Date.now()}.webm`;
+                link.download = `recording-blur-${Date.now()}.webm`;
                 link.href = url;
                 link.click();
                 URL.revokeObjectURL(url);
-                showStatus('🎥 Video berhasil direkam!');
+                showStatus('🎥 Video BLUR berhasil direkam!');
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
             };
+
+            // Proses blur tiap frame
+            function drawFrame() {
+                if (!isRecording) return;
+                
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                applyBlur(canvas);
+                
+                animationId = requestAnimationFrame(drawFrame);
+            }
 
             mediaRecorder.start();
             isRecording = true;
             btnRecord.textContent = '⏹ Stop Rekam';
             btnRecord.classList.add('recording');
-            showStatus('🎥 Merekam video...');
+            showStatus('🎥 Merekam video BLUR...');
+            
+            drawFrame();
         }
 
         function stopRecording() {
@@ -241,6 +279,11 @@
                 isRecording = false;
                 btnRecord.textContent = '🎥 Rekam Video';
                 btnRecord.classList.remove('recording');
+                
+                if (canvasStream) {
+                    canvasStream.getTracks().forEach(track => track.stop());
+                    canvasStream = null;
+                }
             }
         }
 
@@ -256,6 +299,7 @@
         // ======== KEYBOARD SHORTCUT ========
         document.addEventListener('keydown', (e) => {
             if (e.key === 'q' || e.key === 'Q') {
+                if (isRecording) stopRecording();
                 location.reload();
             }
         });
