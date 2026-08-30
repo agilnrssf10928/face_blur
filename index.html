@@ -64,18 +64,6 @@
         .btn:hover { transform: scale(1.05); }
         .btn-capture { background: #ff6b6b; }
         .btn-capture:hover { background: #ee5a24; }
-        .btn-record { background: #4a69bd; }
-        .btn-record:hover { background: #1e3799; }
-        .btn-record.recording {
-            background: #e74c3c;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
 
         .status {
             position: fixed;
@@ -114,28 +102,20 @@
     <video id="video" autoplay playsinline></video>
     <div class="blur-overlay"></div>
     
-    <div class="info">📷 Background Blur - Klik tombol untuk capture / rekam</div>
-    <div class="status" id="status">📸 Gambar tersimpan!</div>
+    <div class="info">📷 Background Blur - Klik tombol untuk ambil foto</div>
+    <div class="status" id="status">📸 Foto tersimpan!</div>
 
     <div class="btn-container">
-        <button class="btn btn-capture" id="btnCapture">📸 Ambil Gambar</button>
-        <button class="btn btn-record" id="btnRecord">🎥 Rekam Video</button>
+        <button class="btn btn-capture" id="btnCapture">📸 Ambil Foto</button>
     </div>
 
     <script>
         const video = document.getElementById('video');
         const status = document.getElementById('status');
         const btnCapture = document.getElementById('btnCapture');
-        const btnRecord = document.getElementById('btnRecord');
-
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        let isRecording = false;
-        let canvasStream = null;
-        let animationId = null;
 
         // ======== SETTING BLUR ========
-        const blurSize = 30; // SAMAIN DENGAN CSS
+        const blurSize = 30; // SAMAIN DENGAN CSS (5, 15, 25, 30, 50)
         // ==============================
 
         // ======== MULAI KAMERA ========
@@ -191,7 +171,7 @@
             ctx.putImageData(imageData, 0, 0);
         }
 
-        // ======== AMBIL GAMBAR ========
+        // ======== AMBIL FOTO ========
         btnCapture.addEventListener('click', () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
@@ -199,93 +179,17 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0);
             
+            // Blur foto
             applyBlur(canvas);
             
+            // Download otomatis
             const link = document.createElement('a');
-            link.download = `capture-blur-${Date.now()}.png`;
+            link.download = `foto-blur-${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
             
-            showStatus('📸 Gambar BLUR berhasil diambil!');
+            showStatus('📸 Foto BLUR berhasil diambil!');
         });
-
-        // ======== REKAM VIDEO (BLUR) ========
-        btnRecord.addEventListener('click', () => {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        });
-
-        function startRecording() {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-
-            // Buat stream dari canvas
-            canvasStream = canvas.captureStream(30);
-
-            mediaRecorder = new MediaRecorder(canvasStream, {
-                mimeType: 'video/webm;codecs=vp9'
-            });
-
-            recordedChunks = [];
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    recordedChunks.push(event.data);
-                }
-            };
-
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.download = `recording-blur-${Date.now()}.webm`;
-                link.href = url;
-                link.click();
-                URL.revokeObjectURL(url);
-                showStatus('🎥 Video BLUR berhasil direkam!');
-                if (animationId) {
-                    cancelAnimationFrame(animationId);
-                    animationId = null;
-                }
-            };
-
-            // Proses blur tiap frame
-            function drawFrame() {
-                if (!isRecording) return;
-                
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                applyBlur(canvas);
-                
-                animationId = requestAnimationFrame(drawFrame);
-            }
-
-            mediaRecorder.start();
-            isRecording = true;
-            btnRecord.textContent = '⏹ Stop Rekam';
-            btnRecord.classList.add('recording');
-            showStatus('🎥 Merekam video BLUR...');
-            
-            drawFrame();
-        }
-
-        function stopRecording() {
-            if (mediaRecorder && isRecording) {
-                mediaRecorder.stop();
-                isRecording = false;
-                btnRecord.textContent = '🎥 Rekam Video';
-                btnRecord.classList.remove('recording');
-                
-                if (canvasStream) {
-                    canvasStream.getTracks().forEach(track => track.stop());
-                    canvasStream = null;
-                }
-            }
-        }
 
         // ======== STATUS SEMENTARA ========
         function showStatus(msg) {
@@ -299,7 +203,6 @@
         // ======== KEYBOARD SHORTCUT ========
         document.addEventListener('keydown', (e) => {
             if (e.key === 'q' || e.key === 'Q') {
-                if (isRecording) stopRecording();
                 location.reload();
             }
         });
