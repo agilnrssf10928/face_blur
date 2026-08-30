@@ -1,21 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Background Blur - Web</title>
+    <title>Background Blur</title>
     <style>
         body { margin: 0; padding: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
         video, canvas { position: absolute; width: 640px; height: 480px; }
-        canvas { transform: scaleX(-1); }
         video { transform: scaleX(-1); }
-        .info { position: absolute; bottom: 20px; color: white; font-family: Arial; font-size: 14px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; }
+        canvas { transform: scaleX(-1); }
+        .info { position: absolute; bottom: 20px; color: white; font-family: Arial; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; }
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
-    <div class="info">📷 Background Blur - Tekan Q untuk keluar (di browser)</div>
+    <div class="info">📷 Background Blur - Halaman ini otomatis buka kamera</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm/vision_bundle.js"></script>
-    <script src="app.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 640;
+        canvas.height = 480;
+
+        // ======== SETTING BLUR ========
+        const blurSize = 15; // 5, 15, 25, 35, 55
+        // ==============================
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480, facingMode: 'user' } 
+                });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    blurFrame();
+                };
+            } catch (err) {
+                alert('Izin kamera ditolak! Cek permission.');
+                console.error(err);
+            }
+        }
+
+        function blurFrame() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Simple blur semua frame
+            const tempData = new Uint8ClampedArray(data);
+            const half = Math.floor(blurSize / 2);
+            
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const idx = (y * canvas.width + x) * 4;
+                    let r = 0, g = 0, b = 0, count = 0;
+                    
+                    for (let dy = -half; dy <= half; dy++) {
+                        for (let dx = -half; dx <= half; dx++) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
+                                const nIdx = (ny * canvas.width + nx) * 4;
+                                r += tempData[nIdx];
+                                g += tempData[nIdx + 1];
+                                b += tempData[nIdx + 2];
+                                count++;
+                            }
+                        }
+                    }
+                    
+                    if (count > 0) {
+                        data[idx] = r / count;
+                        data[idx + 1] = g / count;
+                        data[idx + 2] = b / count;
+                    }
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            requestAnimationFrame(blurFrame);
+        }
+
+        startCamera();
+    </script>
 </body>
 </html>
