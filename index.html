@@ -1,87 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Background Blur</title>
+    <title>Background Blur - GPU</title>
     <style>
-        body { margin: 0; padding: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        video, canvas { position: absolute; width: 640px; height: 480px; }
-        video { transform: scaleX(-1); }
-        canvas { transform: scaleX(-1); }
-        .info { position: absolute; bottom: 20px; color: white; font-family: Arial; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; }
+        * { margin: 0; padding: 0; }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        video {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            transform: scaleX(-1);
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        /* LAPISAN BLUR (DI ATAS VIDEO) */
+        .blur-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+            /* ======== SETTING BLUR ======== */
+            backdrop-filter: blur(30px); /* GANTI ANGKA INI (5-50) */
+            -webkit-backdrop-filter: blur(30px); /* BUAT SAFARI */
+            /* ============================== */
+            pointer-events: none; /* BIAR KLIK BISA TEMBUS */
+        }
+        
+        /* LAPISAN MUKA (TEMBUS BLUR) - PAKAI CLIP-PATH */
+        .face-mask {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 3;
+            pointer-events: none;
+            /* MUKA TEMBUS PAKAI MASK (TAPI GAK BISA DETECT WAJAH OTOMATIS) */
+        }
+
+        .info {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-family: Arial;
+            z-index: 10;
+            font-size: 14px;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
-    <div class="info">📷 Background Blur - Halaman ini otomatis buka kamera</div>
+    <div class="blur-overlay"></div>
+    <div class="info">📷 Background Blur (GPU) - KAMERA LANCAR!</div>
 
     <script>
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = 640;
-        canvas.height = 480;
-
-        // ======== SETTING BLUR ========
-        const blurSize = 15; // 5, 15, 25, 35, 55
-        // ==============================
 
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 640, height: 480, facingMode: 'user' } 
+                    video: { facingMode: 'user' } 
                 });
                 video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    blurFrame();
-                };
             } catch (err) {
-                alert('Izin kamera ditolak! Cek permission.');
+                alert('Izin kamera ditolak!');
                 console.error(err);
             }
-        }
-
-        function blurFrame() {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            // Simple blur semua frame
-            const tempData = new Uint8ClampedArray(data);
-            const half = Math.floor(blurSize / 2);
-            
-            for (let y = 0; y < canvas.height; y++) {
-                for (let x = 0; x < canvas.width; x++) {
-                    const idx = (y * canvas.width + x) * 4;
-                    let r = 0, g = 0, b = 0, count = 0;
-                    
-                    for (let dy = -half; dy <= half; dy++) {
-                        for (let dx = -half; dx <= half; dx++) {
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
-                                const nIdx = (ny * canvas.width + nx) * 4;
-                                r += tempData[nIdx];
-                                g += tempData[nIdx + 1];
-                                b += tempData[nIdx + 2];
-                                count++;
-                            }
-                        }
-                    }
-                    
-                    if (count > 0) {
-                        data[idx] = r / count;
-                        data[idx + 1] = g / count;
-                        data[idx + 2] = b / count;
-                    }
-                }
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-            requestAnimationFrame(blurFrame);
         }
 
         startCamera();
